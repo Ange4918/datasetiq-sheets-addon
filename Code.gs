@@ -319,6 +319,7 @@ function searchSeries(query) {
 function browseBySource(source) {
     const normalizedSource = String(source || '').trim();
     if (!normalizedSource) return [];
+    const targetProvider = normalizeSourceProvider(normalizedSource);
     if (!source) return [];
     const key = getApiKey();
     const params = {
@@ -342,7 +343,7 @@ function browseBySource(source) {
     }
     const filtered = parsed.results.filter((item)=>{
         const provider = (item.provider || item.source || '').toString().toUpperCase();
-        return provider === normalizedSource.toUpperCase();
+        return provider === targetProvider || provider === normalizedSource.toUpperCase() || provider.includes(normalizedSource.toUpperCase()) || normalizedSource.toUpperCase().includes(provider);
     });
     const resultsToMap = filtered.length ? filtered : parsed.results;
     return resultsToMap.map((item)=>({
@@ -745,6 +746,15 @@ function computeRetryAfter(headers, attempt) {
 function formatError(err) {
     if (err instanceof Error) return err.message;
     return 'Unexpected error';
+}
+function normalizeSourceProvider(source) {
+    const upper = source.trim().toUpperCase();
+    const alias = {
+        WORLDBANK: 'WB',
+        WORLD_BANK: 'WB',
+        WORLD_BANK_GROUP: 'WB'
+    };
+    return alias[upper] || upper;
 }
 /**
  * Check if user has premium access (valid API key)

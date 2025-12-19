@@ -283,6 +283,7 @@ function browseBySource(source: string): SearchResult[] {
   if (!source) return [];
   const normalizedSource = String(source).trim();
   if (!normalizedSource) return [];
+  const targetProvider = normalizeSourceProvider(normalizedSource);
   const key = getApiKey();
   const params: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
     method: 'get',
@@ -303,7 +304,12 @@ function browseBySource(source: string): SearchResult[] {
   }
   const filtered = parsed.results.filter((item: any) => {
     const provider = (item.provider || item.source || '').toString().toUpperCase();
-    return provider === normalizedSource.toUpperCase();
+    return (
+      provider === targetProvider ||
+      provider === normalizedSource.toUpperCase() ||
+      provider.includes(normalizedSource.toUpperCase()) ||
+      normalizedSource.toUpperCase().includes(provider)
+    );
   });
   const resultsToMap = filtered.length ? filtered : parsed.results;
   return resultsToMap.map((item: any) => ({
@@ -705,6 +711,16 @@ function computeRetryAfter(headers: Record<string, string>, attempt: number): nu
 function formatError(err: any): string {
   if (err instanceof Error) return err.message;
   return 'Unexpected error';
+}
+
+function normalizeSourceProvider(source: string): string {
+  const upper = source.trim().toUpperCase();
+  const alias: Record<string, string> = {
+    WORLDBANK: 'WB',
+    WORLD_BANK: 'WB',
+    WORLD_BANK_GROUP: 'WB',
+  };
+  return alias[upper] || upper;
 }
 
 /**
