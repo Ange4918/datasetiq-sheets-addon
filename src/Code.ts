@@ -3,8 +3,8 @@
 // Custom functions must remain synchronous in Apps Script, so all fetches are blocking.
 
 const BASE_URL = 'https://datasetiq.com';
-const SERIES_PATH = '/api/public/sheets/series/';
-const ME_PATH = '/api/public/sheets/me';
+const SERIES_PATH = '/api/public/series/';
+const SERIES_DATA_PATH = '/data';
 const SEARCH_PATH = '/api/public/search';
 const HEADER_ROW = ['Date', 'Value'];
 const API_KEY_PROP = 'DATASETIQ_API_KEY';
@@ -21,18 +21,16 @@ type ErrorCode =
   | 'UNKNOWN';
 
 interface SeriesResponse {
-  meta?: { id: string; etag: string };
-  data?: Array<[string, number]>;
+  seriesId?: string;
+  data?: Array<{ date: string; value: number }>;
+  dataset?: any;
   scalar?: number;
   error?: { code: string; message: string };
+  message?: string;
+  status?: string;
 }
 
-interface MeResponse {
-  email: string;
-  plan: string;
-  quota: { used: number; limit: number; reset: string };
-  status: string;
-}
+// Note: User profile endpoint not available in public API
 
 interface SearchResult {
   id: string;
@@ -150,12 +148,12 @@ function DSIQ_META(seriesId: string, field: string) {
   if (errorMessage) {
     throw new Error(errorMessage);
   }
-  const meta = response?.meta;
-  if (!meta || !(normalizedField in meta)) {
+  const dataset = response?.dataset;
+  if (!dataset || !(normalizedField in dataset)) {
     throw new Error(`Metadata "${normalizedField}" not found.`);
   }
   // @ts-expect-error dynamic access
-  return meta[normalizedField];
+  return dataset[normalizedField];
 }
 
 /**
@@ -187,23 +185,23 @@ function getSidebarStatus(): SidebarStatus {
     return { connected: false };
   }
   try {
-    const response = UrlFetchApp.fetch(`${BASE_URL}${ME_PATH}`, {
+    // Test API key with a minimal search request
+    const response = UrlFetchApp.fetch(`${BASE_URL}${SEARCH_PATH}?q=test&limit=1`, {
       method: 'get',
       headers: { Authorization: `Bearer ${key}` },
       muteHttpExceptions: true,
     });
-    if (response.getResponseCode() === 401) {
+    const status = response.getResponseCode();
+    if (status === 401 || status === 403) {
       return { connected: false, error: 'Invalid API key. Please reconnect.' };
     }
-    const body = parseJson(response.getContentText());
-    const me = body as MeResponse;
-    return {
-      connected: true,
-      email: me.email,
-      plan: me.plan,
-      quota: me.quota,
-      status: me.status,
-    };
+    if (status >= 200 && status < 300) {
+      return {
+        connected: true,
+        status: 'connected',
+      };
+    }
+    return { connected: false, error: 'Unable to verify API key' };
   } catch (err) {
     return { connected: false, error: formatError(err) };
   }
@@ -231,10 +229,10 @@ function searchSeries(query: string): SearchResult[] {
     return [];
   }
   const parsed = parseJson(response.getContentText());
-  if (!Array.isArray(parsed)) {
+  if (!parsed.results || !Array.isArray(parsed.results)) {
     return [];
   }
-  return parsed.map((item: any) => ({
+  return parsed.results.map((item: any) => ({
     id: item.id,
     title: item.title,
     frequency: item.frequency,
@@ -262,10 +260,10 @@ function browseBySource(source: string): SearchResult[] {
     return [];
   }
   const parsed = parseJson(response.getContentText());
-  if (!Array.isArray(parsed)) {
+  if (!parsed.results || !Array.isArray(parsed.results)) {
     return [];
   }
-  return parsed.map((item: any) => ({
+  return parsed.results.map((item: any) => ({
     id: item.id,
     title: item.title,
     frequency: item.frequency,
@@ -294,7 +292,7 @@ function getPreviewData(seriesId: string) {
   
   return {
     latest: latestRes?.scalar,
-    meta: metaRes?.meta,
+    meta: metaRes?.dataset,
   };
 }
 
@@ -399,16 +397,24 @@ function fetchSeries(
   options: { mode: string; freq?: string; start?: string; date?: string }
 ): { response?: SeriesResponse; errorMessage?: string } {
   const key = getApiKey();
-  const params: Record<string, string> = {};
-  if (options.mode) params.mode = options.mode;
-  if (options.freq) params.freq = options.freq;
-  if (options.start) params.start = options.start;
-  if (options.date) params.date = options.date;
-
-  const query = Object.keys(params)
-    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
-    .join('&');
-  const url = `${BASE_URL}${SERIES_PATH}${encodeURIComponent(seriesId)}${query ? `?${query}` : ''}`;
+  const { mode, start, date } = options;
+  
+  // For metadata mode, use /api/public/series/[id]
+  // For data modes, use /api/public/series/[id]/data
+  const isMetaMode = mode === 'meta';
+  let url = `${BASE_URL}${SERIES_PATH}${encodeURIComponent(seriesId)}`;
+  
+  if (!isMetaMode) {
+    url += SERIES_DATA_PATH;
+    const params: string[] = [];
+    if (start) params.push(`start=${encodeURIComponent(start)}`);
+    if (date) params.push(`end=${encodeURIComponent(date)}`);
+    // Set higher limit for authenticated requests
+    params.push(`limit=${key ? '1000' : '100'}`);
+    if (params.length > 0) {
+      url += '?' + params.join('&');
+    }
+  }
 
   const request: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
     method: 'get',
@@ -425,7 +431,27 @@ function fetchSeries(
     const headers = normalizeHeaders(response.getAllHeaders());
 
     if (status >= 200 && status < 300 && !body?.error) {
-      return { response: body };
+      // Transform new API response to expected format
+      let transformedResponse: SeriesResponse;
+      if (mode === 'meta' && body.dataset) {
+        // Metadata response
+        transformedResponse = { dataset: body.dataset };
+      } else if (body.data) {
+        // Data response - transform [{date, value}] to [[date, value]]
+        const dataArray = body.data.map((obs: any) => [obs.date, obs.value]);
+        transformedResponse = { data: dataArray, seriesId: body.seriesId };
+        
+        // Handle scalar modes (latest, value, yoy)
+        if (mode === 'latest' && dataArray.length > 0) {
+          const latest = dataArray[dataArray.length - 1];
+          transformedResponse.scalar = latest[1];
+        } else if (mode === 'value' && dataArray.length > 0) {
+          transformedResponse.scalar = dataArray[0][1];
+        }
+      } else {
+        transformedResponse = body;
+      }
+      return { response: transformedResponse };
     }
 
     const retryable = status === 429 || status >= 500;
