@@ -94,8 +94,14 @@ function onOpen() {
  * One-time call to surface UrlFetchApp permissions.
  */
 function authorize() {
-  // Lightweight ping to request UrlFetchApp permission.
-  UrlFetchApp.fetch(`${BASE_URL}/api/public/ping?ts=${Date.now()}`);
+  // Trigger UrlFetchApp and PropertiesService permissions
+  try {
+    UrlFetchApp.fetch(`${BASE_URL}${SEARCH_PATH}?q=test&limit=1`, { muteHttpExceptions: true });
+    PropertiesService.getUserProperties();
+  } catch (e) {
+    // Ignore errors - we just need to trigger permission prompt
+  }
+  SpreadsheetApp.getUi().alert('Authorization complete! You can now use DataSetIQ functions.');
   return 'Authorized';
 }
 
@@ -266,7 +272,7 @@ function searchSeries(query: string): SearchResult[] {
     title: item.title,
     frequency: item.frequency,
     units: item.units,
-    source: item.source,
+    source: item.source || item.provider,
   }));
 }
 
@@ -275,6 +281,8 @@ function searchSeries(query: string): SearchResult[] {
  */
 function browseBySource(source: string): SearchResult[] {
   if (!source) return [];
+  const normalizedSource = String(source).trim();
+  if (!normalizedSource) return [];
   const key = getApiKey();
   const params: GoogleAppsScript.URL_Fetch.URLFetchRequestOptions = {
     method: 'get',
@@ -283,7 +291,8 @@ function browseBySource(source: string): SearchResult[] {
   if (key) {
     params.headers = { Authorization: `Bearer ${key}` };
   }
-  const url = `${BASE_URL}${SEARCH_PATH}?source=${encodeURIComponent(source)}&limit=50`;
+  // API does not filter directly by source; search by source keyword then filter client-side.
+  const url = `${BASE_URL}${SEARCH_PATH}?q=${encodeURIComponent(normalizedSource)}&limit=100`;
   const response = UrlFetchApp.fetch(url, params);
   if (response.getResponseCode() >= 300) {
     return [];
@@ -292,12 +301,17 @@ function browseBySource(source: string): SearchResult[] {
   if (!parsed.results || !Array.isArray(parsed.results)) {
     return [];
   }
-  return parsed.results.map((item: any) => ({
+  const filtered = parsed.results.filter((item: any) => {
+    const provider = (item.provider || item.source || '').toString().toUpperCase();
+    return provider === normalizedSource.toUpperCase();
+  });
+  const resultsToMap = filtered.length ? filtered : parsed.results;
+  return resultsToMap.map((item: any) => ({
     id: item.id,
     title: item.title,
     frequency: item.frequency,
     units: item.units,
-    source: item.source,
+    source: item.source || item.provider,
   }));
 }
 
@@ -493,6 +507,8 @@ function fetchSeries(
     if (date) params.push(`end=${encodeURIComponent(date)}`);
     // Set higher limit for authenticated requests
     params.push(`limit=${key ? '1000' : '100'}`);
+    // Request data in descending order (newest first)
+    params.push('order=desc');
     if (params.length > 0) {
       url += '?' + params.join('&');
     }
@@ -520,8 +536,10 @@ function fetchSeries(
         transformedResponse = { dataset: body.dataset };
       } else if (body.data) {
         // Data response - keep as objects for SeriesResponse type
+        const rawData = body.data;
+        const sortedData = [...rawData].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         transformedResponse = { 
-          data: body.data,
+          data: rawData,
           seriesId: body.seriesId,
           status: body.status,
           message: body.message
@@ -529,10 +547,31 @@ function fetchSeries(
         
         // Handle scalar modes (latest, value, yoy)
         if (mode === 'latest' && body.data.length > 0) {
-          const latest = body.data[body.data.length - 1];
+          const latest = sortedData[0];
           transformedResponse.scalar = latest.value;
         } else if (mode === 'value' && body.data.length > 0) {
-          transformedResponse.scalar = body.data[0].value;
+          transformedResponse.scalar = sortedData[0].value;
+        } else if (mode === 'yoy') {
+          if (!sortedData.length) {
+            return { errorMessage: 'No data available for YoY calculation.' };
+          }
+          const latest = sortedData[0];
+          const latestDate = new Date(latest.date);
+          if (isNaN(latestDate.getTime())) {
+            return { errorMessage: 'Invalid date in series for YoY calculation.' };
+          }
+          const target = new Date(latestDate);
+          target.setFullYear(target.getFullYear() - 1);
+          const windowMs = 45 * 24 * 60 * 60 * 1000; // ±45 days
+          const prior = sortedData.find((item) => {
+            const d = new Date(item.date);
+            if (isNaN(d.getTime())) return false;
+            return Math.abs(d.getTime() - target.getTime()) <= windowMs;
+          });
+          if (!prior || typeof prior.value !== 'number' || prior.value === 0) {
+            return { errorMessage: 'Value not available for YoY calculation.' };
+          }
+          transformedResponse.scalar = ((latest.value - prior.value) / prior.value) * 100;
         }
       } else {
         transformedResponse = body;
@@ -856,32 +895,4 @@ function include(filename: string) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-// Ensure custom functions and menu handlers are available globally after bundling.
-const g = globalThis as any;
-g.onOpen = onOpen;
-g.authorize = authorize;
-g.showSidebar = showSidebar;
-g.DSIQ = DSIQ;
-g.DSIQ_LATEST = DSIQ_LATEST;
-g.DSIQ_VALUE = DSIQ_VALUE;
-g.DSIQ_YOY = DSIQ_YOY;
-g.DSIQ_META = DSIQ_META;
-g.saveApiKey = saveApiKey;
-g.clearApiKey = clearApiKey;
-g.getSidebarStatus = getSidebarStatus;
-g.searchSeries = searchSeries;
-g.checkPremiumAccess = checkPremiumAccess;
-g.buildFormula = buildFormula;
-g.insertBuilderFormula = insertBuilderFormula;
-g.scanFormulas = scanFormulas;
-g.saveTemplate = saveTemplate;
-g.getTemplates = getTemplates;
-g.loadTemplate = loadTemplate;
-g.deleteTemplate = deleteTemplate;
-g.exportTemplates = exportTemplates;
-g.importTemplates = importTemplates;
-g.insertMultipleSeries = insertMultipleSeries;
-g.include = include;
-
-// Export helpers for tests.
-export { normalizeDateInput, mapError, buildArrayResult, normalizeOptionalString };
+// No exports needed - Apps Script will use top-level functions directly

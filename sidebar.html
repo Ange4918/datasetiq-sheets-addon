@@ -20,9 +20,10 @@
       .card {
         border: 1px solid #e2e8f0;
         border-radius: 8px;
-        padding: 12px;
-        margin-bottom: 12px;
+        padding: 14px;
+        margin-bottom: 14px;
         background: #f8fafc;
+        line-height: 1.5;
       }
       label {
         display: block;
@@ -60,10 +61,22 @@
         align-items: center;
       }
       .status {
-        margin: 6px 0;
+        margin: 0 0 12px 0;
+        padding: 10px;
         font-size: 13px;
+        line-height: 1.5;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        white-space: normal;
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        border-radius: 6px;
+        color: #166534;
+        font-weight: 500;
       }
       .status.error {
+        background: #fef2f2;
+        border-color: #fca5a5;
         color: #b91c1c;
       }
       .quota {
@@ -80,22 +93,53 @@
       }
       .result-item {
         display: flex;
-        justify-content: space-between;
-        align-items: center;
+        flex-direction: column;
         gap: 8px;
-        padding: 8px;
+        padding: 12px;
         border: 1px solid #e2e8f0;
-        border-radius: 6px;
+        border-radius: 8px;
         background: #fff;
       }
       .result-id {
         font-weight: 600;
         font-size: 13px;
+        word-break: break-word;
+      }
+      .result-title {
+        font-size: 12px;
+        color: #64748b;
+        line-height: 1.4;
+        margin-top: 4px;
       }
       .result-buttons {
         display: flex;
-        gap: 4px;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+      }
+      .icon-btn {
+        background: #0f172a;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 0;
+        font-size: 16px;
+        cursor: pointer;
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
+      }
+      .icon-btn:hover {
+        background: #1e293b;
       }
       .insert-btn {
         background: #0ea5e9;
@@ -129,6 +173,9 @@
         border-bottom: 1px solid #e2e8f0;
       }
       .tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         background: transparent;
         color: #475569;
         padding: 8px 12px;
@@ -167,6 +214,20 @@
         display: block;
         margin-bottom: 4px;
         font-size: 11px;
+      }
+      .result-buttons.compact-icons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+        gap: 8px;
+      }
+      .result-buttons.compact-icons button {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
       }
     </style>
     <script>
@@ -335,18 +396,18 @@
         updatePremiumTabs();
         
         if (connected) {
-          banner.innerText = status.status || 'Connected';
-          document.getElementById('user-email').innerText = status.email || 'Unknown user';
-          document.getElementById('user-plan').innerText = status.plan || 'Unknown plan';
+          banner.innerText = status.status || '✅ Connected - Premium features unlocked';
+          document.getElementById('user-email').innerText = status.email || 'Authenticated User';
+          const planText = status.plan ? (status.plan.charAt(0).toUpperCase() + status.plan.slice(1) + ' Plan') : 'Premium Access';
+          document.getElementById('user-plan').innerText = planText;
           const quota = status.quota;
           if (quota) {
             document.getElementById('user-quota').innerText = `${quota.used}/${quota.limit} (resets ${quota.reset})`;
           } else {
-            document.getElementById('user-quota').innerText = 'Quota unavailable';
+            document.getElementById('user-quota').innerText = '1000 observations per series';
           }
-          document.getElementById('status-detail').innerText = status.status || '';
         } else {
-          banner.innerText = status.error || 'Enter your API key to connect your account.';
+          banner.innerText = status.error || '🔓 Free access - 100 observations per series. Connect API key for premium features.';
         }
       }
       
@@ -406,10 +467,10 @@
           const li = document.createElement('li');
           li.className = 'result-item';
           
-          const leftSide = document.createElement('div');
-          leftSide.style.display = 'flex';
-          leftSide.style.alignItems = 'center';
-          leftSide.style.gap = '8px';
+          const topRow = document.createElement('div');
+          topRow.style.display = 'flex';
+          topRow.style.alignItems = 'flex-start';
+          topRow.style.gap = '8px';
           
           // Multi-select checkbox for paid users
           if (isPaid) {
@@ -418,22 +479,25 @@
             checkbox.checked = selectedForMultiInsert.includes(item.id);
             checkbox.onchange = () => toggleMultiSelect(item.id);
             checkbox.style.cursor = 'pointer';
-            leftSide.appendChild(checkbox);
+            checkbox.style.marginTop = '2px';
+            topRow.appendChild(checkbox);
           }
           
           const info = document.createElement('div');
+          info.style.flex = '1';
+          info.style.minWidth = '0';
           const idDiv = document.createElement('div');
           idDiv.className = 'result-id';
           idDiv.innerText = item.id;
           const titleDiv = document.createElement('div');
-          titleDiv.className = 'muted';
+          titleDiv.className = 'result-title';
           titleDiv.innerText = item.title || '';
           info.appendChild(idDiv);
           info.appendChild(titleDiv);
-          leftSide.appendChild(info);
+          topRow.appendChild(info);
           
           const buttons = document.createElement('div');
-          buttons.className = 'result-buttons';
+          buttons.className = 'result-buttons compact-icons';
           
           const btnPreview = createPreviewButton(item.id);
           const btnArray = createInsertButton('📊 Array', item.id, 'DSIQ');
@@ -445,7 +509,7 @@
           buttons.appendChild(btnLatest);
           buttons.appendChild(btnYoy);
           
-          li.appendChild(leftSide);
+          li.appendChild(topRow);
           li.appendChild(buttons);
           list.appendChild(li);
         });
@@ -881,11 +945,39 @@
       function renderBrowseResults() {
         const container = document.getElementById('browse-results');
         if (!browseResults || !browseResults.length) {
-          container.innerHTML = '<div class="muted">No results found.</div>';
+          container.innerHTML = '<div class="muted">No results found for this source.</div>';
           return;
         }
-        container.innerHTML = `<div class="muted" style="margin-bottom: 8px;">Showing ${browseResults.length} series</div>`;
-        renderList(browseResults.map(r => r.id), 'browse-results', false);
+        // Clear container completely and rebuild
+        container.innerHTML = '';
+        const countDiv = document.createElement('div');
+        countDiv.className = 'muted';
+        countDiv.style.marginBottom = '8px';
+        countDiv.innerText = `Showing ${browseResults.length} series`;
+        container.appendChild(countDiv);
+        
+        const list = document.createElement('ul');
+        list.style.padding = '0';
+        list.style.margin = '0';
+        list.style.listStyle = 'none';
+        browseResults.forEach((item) => {
+          const li = document.createElement('li');
+          li.className = 'result-item';
+          li.innerHTML = `
+            <div>
+              <div class="result-id">${item.id}</div>
+              <div class="result-title">${item.title || ''}</div>
+            </div>
+            <div class="action-buttons">
+              <button class="icon-btn" onclick="showPreview('${item.id}')" title="Preview">👁️</button>
+              <button class="icon-btn" onclick="toggleFavorite('${item.id}')" title="Favorite">⭐</button>
+              <button class="icon-btn" onclick="insertSeries('${item.id}', 'DSIQ')" title="Insert Array">📊</button>
+              <button class="icon-btn" onclick="insertSeries('${item.id}', 'DSIQ_LATEST')" title="Latest Value">📈</button>
+            </div>
+          `;
+          list.appendChild(li);
+        });
+        container.appendChild(list);
       }
       
       function renderList(items, containerId, showRemove) {
@@ -951,13 +1043,10 @@
     <div id="status-banner" class="status"></div>
     <div id="connected-view" style="display: none">
       <div class="card">
-        <div><strong>Connected as:</strong> <span id="user-email"></span></div>
-        <div><strong>Plan:</strong> <span id="user-plan"></span></div>
-        <div class="quota"><strong>Quota:</strong> <span id="user-quota"></span></div>
-        <div class="muted">Status: <span id="status-detail"></span></div>
-        <div style="margin-top: 8px">
-          <button class="secondary" onclick="disconnect()">Disconnect</button>
-        </div>
+        <div style="word-wrap: break-word; margin-bottom: 4px;"><strong>Email:</strong> <span id="user-email"></span></div>
+        <div style="word-wrap: break-word; margin-bottom: 4px;"><strong>Plan:</strong> <span id="user-plan"></span></div>
+        <div class="quota" style="word-wrap: break-word; margin-bottom: 8px;"><strong>Limit:</strong> <span id="user-quota"></span></div>
+        <button class="secondary" onclick="disconnect()" style="width: 100%;">Disconnect API Key</button>
       </div>
       <div class="card">
         <div style="margin-bottom: 12px;">

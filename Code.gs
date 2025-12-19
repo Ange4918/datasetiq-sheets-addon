@@ -1,0 +1,935 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */ // Core Google Sheets add-on logic for DataSetIQ.
+// Custom functions must remain synchronous in Apps Script, so all fetches are blocking.
+const BASE_URL = 'https://datasetiq.com';
+const SERIES_PATH = '/api/public/series/';
+const SERIES_DATA_PATH = '/data';
+const SEARCH_PATH = '/api/public/search';
+const HEADER_ROW = [
+    'Date',
+    'Value'
+];
+const API_KEY_PROP = 'DATASETIQ_API_KEY';
+const FAVORITES_PROP = 'DATASETIQ_FAVORITES';
+const RECENT_PROP = 'DATASETIQ_RECENT';
+const SOURCES = [
+    {
+        id: 'FRED',
+        name: 'FRED (Federal Reserve)'
+    },
+    {
+        id: 'BLS',
+        name: 'BLS (Bureau of Labor Statistics)'
+    },
+    {
+        id: 'BEA',
+        name: 'BEA (Bureau of Economic Analysis)'
+    },
+    {
+        id: 'CENSUS',
+        name: 'US Census Bureau'
+    },
+    {
+        id: 'EIA',
+        name: 'EIA (Energy Information)'
+    },
+    {
+        id: 'IMF',
+        name: 'IMF (International Monetary Fund)'
+    },
+    {
+        id: 'OECD',
+        name: 'OECD'
+    },
+    {
+        id: 'WORLDBANK',
+        name: 'World Bank'
+    },
+    {
+        id: 'ECB',
+        name: 'ECB (European Central Bank)'
+    },
+    {
+        id: 'EUROSTAT',
+        name: 'Eurostat'
+    },
+    {
+        id: 'BOE',
+        name: 'Bank of England'
+    },
+    {
+        id: 'ONS',
+        name: 'ONS (UK Office for National Statistics)'
+    },
+    {
+        id: 'STATCAN',
+        name: 'StatCan (Statistics Canada)'
+    },
+    {
+        id: 'RBA',
+        name: 'RBA (Reserve Bank of Australia)'
+    },
+    {
+        id: 'BOJ',
+        name: 'BOJ (Bank of Japan)'
+    }
+];
+const PAID_PLANS = [
+    'starter',
+    'premium',
+    'pro',
+    'team',
+    'enterprise'
+];
+const PREMIUM_FEATURES = {
+    FORMULA_BUILDER: 'Formula Builder Wizard',
+    RICH_METADATA: 'Full Metadata Panel',
+    MULTI_INSERT: 'Multi-Series Insert',
+    TEMPLATES: 'Templates Import/Export'
+};
+const TEMPLATES_PROP = 'DATASETIQ_TEMPLATES';
+/**
+ * Adds menu entry for first-run authorization and sidebar.
+ */
+function onOpen() {
+    SpreadsheetApp.getUi().createMenu('DataSetIQ').addItem('Authorize', 'authorize').addItem('Open Sidebar', 'showSidebar').addToUi();
+}
+/**
+ * One-time call to surface UrlFetchApp permissions.
+ */
+function authorize() {
+    // Trigger UrlFetchApp and PropertiesService permissions
+    try {
+        UrlFetchApp.fetch(`${BASE_URL}${SEARCH_PATH}?q=test&limit=1`, {
+            muteHttpExceptions: true
+        });
+        PropertiesService.getUserProperties();
+    } catch (e) {
+    // Ignore errors - we just need to trigger permission prompt
+    }
+    SpreadsheetApp.getUi().alert('Authorization complete! You can now use DataSetIQ functions.');
+    return 'Authorized';
+}
+/**
+ * Renders the sidebar UI.
+ */
+function showSidebar() {
+    const template = HtmlService.createTemplateFromFile('sidebar');
+    const html = template.evaluate().setTitle('DataSetIQ');
+    SpreadsheetApp.getUi().showSidebar(html);
+}
+/**
+ * Custom function: returns spill array with headers, sorted newest to oldest.
+ */
+function DSIQ(seriesId, frequency, startDate) {
+    var _ref;
+    const series = normalizeSeriesId(seriesId);
+    const freq = normalizeOptionalString(frequency);
+    const start = normalizeDateInput(startDate);
+    const { response, errorMessage } = fetchSeries(series, {
+        mode: 'table',
+        freq,
+        start
+    });
+    if (errorMessage) {
+        throw new Error(errorMessage);
+    }
+    const data = (_ref = response === null || response === void 0 ? void 0 : response.data) !== null && _ref !== void 0 ? _ref : [];
+    const tuples = data.map((d)=>[
+            d.date,
+            d.value
+        ]);
+    const result = buildArrayResult(tuples);
+    // Add upgrade message for free users if data is truncated at 100 observations
+    const key = getApiKey();
+    if (!key && data.length >= 100) {
+        result.push([
+            '',
+            ''
+        ]);
+        result.push([
+            '⚠️ Free tier limited to 100 most recent observations',
+            ''
+        ]);
+        result.push([
+            'Upgrade for full access: datasetiq.com/pricing',
+            ''
+        ]);
+    }
+    return result;
+}
+/**
+ * Custom function: latest value.
+ */
+function DSIQ_LATEST(seriesId) {
+    return handleScalar(seriesId, {
+        mode: 'latest'
+    });
+}
+/**
+ * Custom function: value on or before the given date.
+ */
+function DSIQ_VALUE(seriesId, date) {
+    const normalizedDate = normalizeDateInput(date);
+    if (!normalizedDate) {
+        throw new Error('Date is required for DSIQ_VALUE.');
+    }
+    return handleScalar(seriesId, {
+        mode: 'value',
+        date: normalizedDate
+    });
+}
+/**
+ * Custom function: YoY.
+ */
+function DSIQ_YOY(seriesId) {
+    return handleScalar(seriesId, {
+        mode: 'yoy'
+    });
+}
+/**
+ * Custom function: metadata lookup.
+ */
+function DSIQ_META(seriesId, field) {
+    const series = normalizeSeriesId(seriesId);
+    const normalizedField = normalizeOptionalString(field);
+    if (!normalizedField) {
+        throw new Error('Field is required for DSIQ_META.');
+    }
+    const { response, errorMessage } = fetchSeries(series, {
+        mode: 'meta'
+    });
+    if (errorMessage) {
+        throw new Error(errorMessage);
+    }
+    const dataset = response === null || response === void 0 ? void 0 : response.dataset;
+    if (!dataset || !(normalizedField in dataset)) {
+        throw new Error(`Metadata "${normalizedField}" not found.`);
+    }
+    return dataset[normalizedField];
+}
+/**
+ * Sidebar helper: save API key.
+ */
+function saveApiKey(key) {
+    const trimmed = normalizeOptionalString(key);
+    if (!trimmed) {
+        throw new Error('API key is required.');
+    }
+    PropertiesService.getUserProperties().setProperty(API_KEY_PROP, trimmed);
+    return {
+        ok: true
+    };
+}
+/**
+ * Sidebar helper: clear API key.
+ */
+function clearApiKey() {
+    PropertiesService.getUserProperties().deleteProperty(API_KEY_PROP);
+    return {
+        ok: true
+    };
+}
+/**
+ * Sidebar helper: fetch profile/entitlements for status panel.
+ */
+function getSidebarStatus() {
+    const key = getApiKey();
+    if (!key) {
+        return {
+            connected: false,
+            isPaid: false
+        };
+    }
+    try {
+        // Test API key with a minimal search request
+        const response = UrlFetchApp.fetch(`${BASE_URL}${SEARCH_PATH}?q=test&limit=1`, {
+            method: 'get',
+            headers: {
+                Authorization: `Bearer ${key}`
+            },
+            muteHttpExceptions: true
+        });
+        const status = response.getResponseCode();
+        if (status === 401 || status === 403) {
+            return {
+                connected: false,
+                isPaid: false,
+                error: 'Invalid API key. Please reconnect.'
+            };
+        }
+        if (status >= 200 && status < 300) {
+            // Valid API key = paid user with premium features
+            return {
+                connected: true,
+                isPaid: true,
+                status: '✅ Connected - Premium features unlocked'
+            };
+        }
+        return {
+            connected: false,
+            isPaid: false,
+            error: 'Unable to verify API key'
+        };
+    } catch (err) {
+        return {
+            connected: false,
+            isPaid: false,
+            error: formatError(err)
+        };
+    }
+}
+/**
+ * Sidebar helper: search endpoint.
+ */
+function searchSeries(query) {
+    const q = normalizeOptionalString(query);
+    if (!q) {
+        return [];
+    }
+    const key = getApiKey();
+    const params = {
+        method: 'get',
+        muteHttpExceptions: true
+    };
+    if (key) {
+        params.headers = {
+            Authorization: `Bearer ${key}`
+        };
+    }
+    const url = `${BASE_URL}${SEARCH_PATH}?q=${encodeURIComponent(q)}`;
+    const response = UrlFetchApp.fetch(url, params);
+    if (response.getResponseCode() >= 300) {
+        return [];
+    }
+    const parsed = parseJson(response.getContentText());
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+        return [];
+    }
+    return parsed.results.map((item)=>({
+    id: item.id,
+    title: item.title,
+    frequency: item.frequency,
+    units: item.units,
+    source: item.source || item.provider
+  }));
+}
+/**
+ * Sidebar helper: browse by source
+ */
+function browseBySource(source) {
+    const normalizedSource = String(source || '').trim();
+    if (!normalizedSource) return [];
+    if (!source) return [];
+    const key = getApiKey();
+    const params = {
+        method: 'get',
+        muteHttpExceptions: true
+    };
+    if (key) {
+        params.headers = {
+            Authorization: `Bearer ${key}`
+        };
+    }
+    // API does not filter directly by source; search by source keyword then filter client-side.
+    const url = `${BASE_URL}${SEARCH_PATH}?q=${encodeURIComponent(normalizedSource)}&limit=100`;
+    const response = UrlFetchApp.fetch(url, params);
+    if (response.getResponseCode() >= 300) {
+        return [];
+    }
+    const parsed = parseJson(response.getContentText());
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+        return [];
+    }
+    const filtered = parsed.results.filter((item)=>{
+        const provider = (item.provider || item.source || '').toString().toUpperCase();
+        return provider === normalizedSource.toUpperCase();
+    });
+    const resultsToMap = filtered.length ? filtered : parsed.results;
+    return resultsToMap.map((item)=>({
+            id: item.id,
+            title: item.title,
+            frequency: item.frequency,
+            units: item.units,
+            source: item.source || item.provider
+        }));
+}
+/**
+ * Sidebar helper: get sources list
+ */
+function getSources() {
+    return SOURCES;
+}
+/**
+ * Sidebar helper: get preview data for a series
+ */
+function getPreviewData(seriesId) {
+    const { response: latestRes, errorMessage: latestErr } = fetchSeries(seriesId, {
+        mode: 'latest'
+    });
+    const { response: metaRes, errorMessage: metaErr } = fetchSeries(seriesId, {
+        mode: 'meta'
+    });
+    if (latestErr || metaErr) {
+        return {
+            error: latestErr || metaErr
+        };
+    }
+    // Check if this is a metadata-only dataset
+    const isMetadataOnly = (latestRes === null || latestRes === void 0 ? void 0 : latestRes.status) === 'metadata_only';
+    const isPending = (latestRes === null || latestRes === void 0 ? void 0 : latestRes.status) === 'ingestion_pending';
+    return {
+        latest: latestRes === null || latestRes === void 0 ? void 0 : latestRes.scalar,
+        meta: metaRes === null || metaRes === void 0 ? void 0 : metaRes.dataset,
+        isMetadataOnly,
+        isPending,
+        statusMessage: latestRes === null || latestRes === void 0 ? void 0 : latestRes.message
+    };
+}
+/**
+ * Request full ingestion for a metadata-only dataset
+ */
+function requestFullIngestion(seriesId) {
+    const key = getApiKey();
+    const url = `${BASE_URL}/api/datasets/${encodeURIComponent(seriesId)}/fetch`;
+    const request = {
+        method: 'post',
+        muteHttpExceptions: true,
+        headers: {
+            'Content-Type': 'application/json',
+            ...key ? {
+                'Authorization': `Bearer ${key}`
+            } : {}
+        },
+        payload: JSON.stringify({})
+    };
+    try {
+        const response = UrlFetchApp.fetch(url, request);
+        const status = response.getResponseCode();
+        const bodyText = response.getContentText();
+        const data = parseJson(bodyText);
+        if (status === 401 || data.requiresAuth) {
+            return {
+                requiresAuth: true,
+                error: 'Authentication required'
+            };
+        }
+        if (status === 429 || data.upgradeToPro) {
+            return {
+                upgradeToPro: true,
+                limit: data.limit || 100,
+                remaining: data.remaining || 0,
+                resetAt: data.resetAt
+            };
+        }
+        if (status >= 200 && status < 300 && data.success) {
+            return {
+                success: true,
+                message: 'Dataset ingestion started'
+            };
+        }
+        return {
+            error: data.error || data.message || 'Failed to request ingestion'
+        };
+    } catch (err) {
+        return {
+            error: err.message || 'Network error'
+        };
+    }
+}
+/**
+ * Sidebar helper: insert formula into active cell.
+ */
+function insertFormulaIntoActiveCell(seriesId, functionName) {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const cell = sheet.getActiveCell();
+    let formula = '';
+    switch(functionName){
+        case 'DSIQ':
+            formula = `=DSIQ("${seriesId}")`;
+            break;
+        case 'DSIQ_LATEST':
+            formula = `=DSIQ_LATEST("${seriesId}")`;
+            break;
+        case 'DSIQ_VALUE':
+            formula = `=DSIQ_VALUE("${seriesId}", TODAY())`;
+            break;
+        case 'DSIQ_YOY':
+            formula = `=DSIQ_YOY("${seriesId}")`;
+            break;
+        case 'DSIQ_META':
+            formula = `=DSIQ_META("${seriesId}", "title")`;
+            break;
+        default:
+            formula = `=DSIQ("${seriesId}")`;
+    }
+    cell.setFormula(formula);
+    addToRecent(seriesId);
+    return {
+        ok: true
+    };
+}
+/**
+ * Favorites management
+ */
+function getFavorites() {
+    const stored = PropertiesService.getUserProperties().getProperty(FAVORITES_PROP);
+    return stored ? JSON.parse(stored) : [];
+}
+function addFavorite(seriesId) {
+    const favorites = getFavorites();
+    if (!favorites.includes(seriesId)) {
+        favorites.unshift(seriesId);
+        PropertiesService.getUserProperties().setProperty(FAVORITES_PROP, JSON.stringify(favorites.slice(0, 50)));
+    }
+    return {
+        ok: true
+    };
+}
+function removeFavorite(seriesId) {
+    const favorites = getFavorites();
+    const filtered = favorites.filter((id)=>id !== seriesId);
+    PropertiesService.getUserProperties().setProperty(FAVORITES_PROP, JSON.stringify(filtered));
+    return {
+        ok: true
+    };
+}
+/**
+ * Recent series management
+ */
+function getRecent() {
+    const stored = PropertiesService.getUserProperties().getProperty(RECENT_PROP);
+    return stored ? JSON.parse(stored) : [];
+}
+function addToRecent(seriesId) {
+    const recent = getRecent();
+    const filtered = recent.filter((id)=>id !== seriesId);
+    filtered.unshift(seriesId);
+    PropertiesService.getUserProperties().setProperty(RECENT_PROP, JSON.stringify(filtered.slice(0, 20)));
+}
+/**
+ * Shared scalar handler with retry/backoff.
+ */
+function handleScalar(seriesId, opts) {
+    const series = normalizeSeriesId(seriesId);
+    const { response, errorMessage } = fetchSeries(series, opts);
+    if (errorMessage) {
+        throw new Error(errorMessage);
+    }
+    if (typeof (response === null || response === void 0 ? void 0 : response.scalar) === 'undefined') {
+        throw new Error('Value not available.');
+    }
+    return response.scalar;
+}
+/**
+ * Central fetch with single retry on 429/5xx.
+ */
+function fetchSeries(seriesId, options) {
+    const key = getApiKey();
+    const { mode, start, date } = options;
+    // For metadata mode, use /api/public/series/[id]
+    // For data modes, use /api/public/series/[id]/data
+    const isMetaMode = mode === 'meta';
+    let url = `${BASE_URL}${SERIES_PATH}${encodeURIComponent(seriesId)}`;
+    if (!isMetaMode) {
+        url += SERIES_DATA_PATH;
+        const params = [];
+        if (start) params.push(`start=${encodeURIComponent(start)}`);
+        if (date) params.push(`end=${encodeURIComponent(date)}`);
+        // Set higher limit for authenticated requests
+        params.push(`limit=${key ? '1000' : '100'}`);
+        // Request data in descending order (newest first)
+        params.push('order=desc');
+        if (params.length > 0) {
+            url += '?' + params.join('&');
+        }
+    }
+    const request = {
+        method: 'get',
+        muteHttpExceptions: true,
+        headers: key ? {
+            Authorization: `Bearer ${key}`
+        } : {}
+    };
+    let attempt = 0;
+    while(attempt < 2){
+        var _body_error, _body_error1;
+        const response = UrlFetchApp.fetch(url, request);
+        const status = response.getResponseCode();
+        const bodyText = response.getContentText();
+        const body = parseJson(bodyText);
+        const headers = normalizeHeaders(response.getAllHeaders());
+        if (status >= 200 && status < 300 && !(body === null || body === void 0 ? void 0 : body.error)) {
+            // Transform new API response to expected format
+            let transformedResponse;
+            if (mode === 'meta' && body.dataset) {
+                // Metadata response
+                transformedResponse = {
+                    dataset: body.dataset
+                };
+            } else if (body.data) {
+                // Data response - keep as objects for SeriesResponse type
+                const rawData = body.data;
+                const sortedData = [
+                    ...rawData
+                ].sort((a, b)=>new Date(b.date).getTime() - new Date(a.date).getTime());
+                transformedResponse = {
+                    data: rawData,
+                    seriesId: body.seriesId,
+                    status: body.status,
+                    message: body.message
+                };
+                // Handle scalar modes (latest, value, yoy)
+                if (mode === 'latest' && body.data.length > 0) {
+                    const latest = sortedData[0];
+                    transformedResponse.scalar = latest.value;
+                } else if (mode === 'value' && body.data.length > 0) {
+                    transformedResponse.scalar = sortedData[0].value;
+                } else if (mode === 'yoy') {
+                    if (!sortedData.length) {
+                        return {
+                            errorMessage: 'No data available for YoY calculation.'
+                        };
+                    }
+                    const latest = sortedData[0];
+                    const latestDate = new Date(latest.date);
+                    if (isNaN(latestDate.getTime())) {
+                        return {
+                            errorMessage: 'Invalid date in series for YoY calculation.'
+                        };
+                    }
+                    const target = new Date(latestDate);
+                    target.setFullYear(target.getFullYear() - 1);
+                    const windowMs = 45 * 24 * 60 * 60 * 1000;
+                    const prior = sortedData.find((item)=>{
+                        const d = new Date(item.date);
+                        if (isNaN(d.getTime())) return false;
+                        return Math.abs(d.getTime() - target.getTime()) <= windowMs;
+                    });
+                    if (!prior || typeof prior.value !== 'number' || prior.value === 0) {
+                        return {
+                            errorMessage: 'Value not available for YoY calculation.'
+                        };
+                    }
+                    transformedResponse.scalar = (latest.value - prior.value) / prior.value * 100;
+                }
+            } else {
+                transformedResponse = body;
+            }
+            return {
+                response: transformedResponse
+            };
+        }
+        const retryable = status === 429 || status >= 500;
+        if (attempt === 0 && retryable) {
+            const retryAfterMs = computeRetryAfter(headers, attempt);
+            Utilities.sleep(retryAfterMs);
+            attempt += 1;
+            continue;
+        }
+        const code = body === null || body === void 0 ? void 0 : (_body_error = body.error) === null || _body_error === void 0 ? void 0 : _body_error.code;
+        const messageFromBody = body === null || body === void 0 ? void 0 : (_body_error1 = body.error) === null || _body_error1 === void 0 ? void 0 : _body_error1.message;
+        const message = mapError(code, status, messageFromBody);
+        return {
+            errorMessage: message
+        };
+    }
+    return {
+        errorMessage: 'Unable to reach DataSetIQ. Please try again.'
+    };
+}
+/**
+ * Build spill array with header.
+ */
+function buildArrayResult(data) {
+    if (!Array.isArray(data)) {
+        return [
+            HEADER_ROW
+        ];
+    }
+    const sorted = [
+        ...data
+    ].sort((a, b)=>{
+        const aDate = new Date(a[0]).getTime();
+        const bDate = new Date(b[0]).getTime();
+        return bDate - aDate;
+    });
+    return [
+        HEADER_ROW,
+        ...sorted
+    ];
+}
+/**
+ * Normalize optional values that may come as null/undefined.
+ */
+function normalizeOptionalString(value) {
+    if (value === null || typeof value === 'undefined') return undefined;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length ? trimmed : undefined;
+    }
+    return String(value);
+}
+function normalizeSeriesId(seriesId) {
+    const normalized = normalizeOptionalString(seriesId);
+    if (!normalized) {
+        throw new Error('series_id is required.');
+    }
+    return normalized;
+}
+function normalizeDateInput(value) {
+    if (value === null || typeof value === 'undefined' || value === '') {
+        return undefined;
+    }
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+        const date = value;
+        if (isNaN(date.getTime())) {
+            throw new Error('Invalid date.');
+        }
+        if (typeof Utilities !== 'undefined') {
+            return Utilities.formatDate(date, 'GMT', 'yyyy-MM-dd');
+        }
+        // Fallback for tests outside Apps Script.
+        return date.toISOString().slice(0, 10);
+    }
+    if (typeof value === 'string') {
+        return value;
+    }
+    throw new Error('Invalid date input.');
+}
+/**
+ * Map standardized error codes to user-friendly messages.
+ */
+function mapError(code, status, fallback) {
+    if (code === 'NO_KEY') return 'Please open DataSetIQ sidebar to connect.';
+    if (code === 'INVALID_KEY') return 'Invalid API Key. Reconnect at datasetiq.com/dashboard/api-keys';
+    if (code === 'REVOKED_KEY') return 'API Key revoked. Get a new key at datasetiq.com/dashboard/api-keys';
+    if (code === 'FREE_LIMIT') return 'Free plan limit reached. Upgrade at datasetiq.com/pricing';
+    if (code === 'QUOTA_EXCEEDED') return 'Daily Quota Exceeded. Upgrade at datasetiq.com/pricing';
+    if (code === 'PLAN_REQUIRED') return 'Upgrade required. Visit datasetiq.com/pricing';
+    if (status === 429) return 'Rate limited. Please retry shortly.';
+    if (status >= 500) return 'Server unavailable. Please retry.';
+    return fallback || 'Unable to fetch data.';
+}
+function parseJson(body) {
+    try {
+        return JSON.parse(body);
+    } catch (_err) {
+        return {};
+    }
+}
+function getApiKey() {
+    return PropertiesService.getUserProperties().getProperty(API_KEY_PROP);
+}
+function normalizeHeaders(headers) {
+    const normalized = {};
+    Object.keys(headers || {}).forEach((key)=>{
+        normalized[key.toLowerCase()] = String(headers[key]);
+    });
+    return normalized;
+}
+function computeRetryAfter(headers, attempt) {
+    const retryAfter = headers['retry-after'];
+    if (retryAfter) {
+        const asNumber = Number(retryAfter);
+        if (!isNaN(asNumber)) {
+            return asNumber * 1000;
+        }
+        const parsed = Date.parse(retryAfter);
+        if (!isNaN(parsed)) {
+            const diff = parsed - Date.now();
+            return diff > 0 ? diff : 500 * Math.pow(2, attempt);
+        }
+    }
+    return 500 * Math.pow(2, attempt);
+}
+function formatError(err) {
+    if (err instanceof Error) return err.message;
+    return 'Unexpected error';
+}
+/**
+ * Check if user has premium access (valid API key)
+ */
+function checkPremiumAccess() {
+    const key = getApiKey();
+    if (!key) {
+        return {
+            allowed: false,
+            message: '🔒 Premium features require an API key. Visit datasetiq.com/dashboard/api-keys to get started.'
+        };
+    }
+    // Valid API key = premium access
+    return {
+        allowed: true
+    };
+}
+/**
+ * Formula Builder: Generate formula with wizard
+ */
+function buildFormula(config) {
+    const { functionName, seriesId, freq, startDate } = config;
+    let formula = `=${functionName}("${seriesId}"`;
+    if (functionName === 'DSIQ' || functionName === 'DSIQ_VALUE') {
+        if (freq) formula += `, "${freq}"`;
+        if (startDate) formula += `, "${startDate}"`;
+    }
+    formula += ')';
+    return {
+        formula
+    };
+}
+/**
+ * Insert formula into active cell
+ */
+function insertBuilderFormula(formula) {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const cell = sheet.getActiveCell();
+    cell.setFormula(formula);
+    return {
+        ok: true
+    };
+}
+/**
+ * Templates: Scan sheet for DSIQ formulas
+ */
+function scanFormulas() {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const range = sheet.getDataRange();
+    const formulas = range.getFormulas();
+    const result = [];
+    for(let row = 0; row < formulas.length; row++){
+        for(let col = 0; col < formulas[row].length; col++){
+            const formula = formulas[row][col];
+            if (formula && typeof formula === 'string' && formula.includes('DSIQ')) {
+                const cell = sheet.getRange(row + 1, col + 1).getA1Notation();
+                result.push({
+                    cell,
+                    formula
+                });
+            }
+        }
+    }
+    return {
+        formulas: result
+    };
+}
+/**
+ * Templates: Save template
+ */
+function saveTemplate(name, formulas) {
+    const templates = getTemplates();
+    const newTemplate = {
+        id: Date.now().toString(),
+        name,
+        formulas,
+        createdAt: new Date().toISOString()
+    };
+    templates.unshift(newTemplate);
+    PropertiesService.getUserProperties().setProperty(TEMPLATES_PROP, JSON.stringify(templates.slice(0, 20)));
+    return {
+        ok: true,
+        template: newTemplate
+    };
+}
+/**
+ * Templates: Get all templates
+ */
+function getTemplates() {
+    const stored = PropertiesService.getUserProperties().getProperty(TEMPLATES_PROP);
+    return stored ? JSON.parse(stored) : [];
+}
+/**
+ * Templates: Load template into sheet
+ */
+function loadTemplate(templateId) {
+    const templates = getTemplates();
+    const template = templates.find((t)=>t.id === templateId);
+    if (!template) {
+        return {
+            ok: false,
+            error: 'Template not found'
+        };
+    }
+    const sheet = SpreadsheetApp.getActiveSheet();
+    template.formulas.forEach((item)=>{
+        try {
+            const cell = sheet.getRange(item.cell);
+            cell.setFormula(item.formula);
+        } catch (err) {
+        // Continue on error
+        }
+    });
+    return {
+        ok: true
+    };
+}
+/**
+ * Templates: Delete template
+ */
+function deleteTemplate(templateId) {
+    const templates = getTemplates();
+    const filtered = templates.filter((t)=>t.id !== templateId);
+    PropertiesService.getUserProperties().setProperty(TEMPLATES_PROP, JSON.stringify(filtered));
+    return {
+        ok: true
+    };
+}
+/**
+ * Templates: Export to JSON string
+ */
+function exportTemplates() {
+    const templates = getTemplates();
+    return {
+        data: JSON.stringify(templates, null, 2)
+    };
+}
+/**
+ * Templates: Import from JSON string
+ */
+function importTemplates(jsonData) {
+    try {
+        const imported = JSON.parse(jsonData);
+        if (!Array.isArray(imported)) {
+            return {
+                ok: false,
+                error: 'Invalid template format'
+            };
+        }
+        const existing = getTemplates();
+        const combined = [
+            ...existing,
+            ...imported
+        ];
+        PropertiesService.getUserProperties().setProperty(TEMPLATES_PROP, JSON.stringify(combined.slice(0, 50)));
+        return {
+            ok: true,
+            count: imported.length
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            error: 'Failed to parse JSON'
+        };
+    }
+}
+/**
+ * Multi-insert: Insert multiple series at once
+ */
+function insertMultipleSeries(seriesIds, functionName) {
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const startCell = sheet.getActiveCell();
+    const startRow = startCell.getRow();
+    seriesIds.forEach((seriesId, index)=>{
+        const cell = sheet.getRange(startRow + index, startCell.getColumn());
+        const formula = `=${functionName}("${seriesId}")`;
+        cell.setFormula(formula);
+        addToRecent(seriesId);
+    });
+    return {
+        ok: true,
+        count: seriesIds.length
+    };
+}
+// Expose functions to HTML sandbox.
+function include(filename) {
+    return HtmlService.createHtmlOutputFromFile(filename).getContent();
+} // No exports needed - Apps Script will use top-level functions directly
