@@ -124,7 +124,8 @@ function DSIQ(seriesId: string, frequency?: string | null, startDate?: any) {
     throw new Error(errorMessage);
   }
   const data = response?.data ?? [];
-  const result = buildArrayResult(data);
+  const tuples: [string, number][] = data.map(d => [d.date, d.value]);
+  const result = buildArrayResult(tuples);
   
   // Add upgrade message for free users if data is truncated at 100 observations
   const key = getApiKey();
@@ -175,11 +176,10 @@ function DSIQ_META(seriesId: string, field: string) {
   if (errorMessage) {
     throw new Error(errorMessage);
   }
-  const dataset = response?.dataset;
+  const dataset = response?.dataset as any;
   if (!dataset || !(normalizedField in dataset)) {
     throw new Error(`Metadata "${normalizedField}" not found.`);
   }
-  // @ts-expect-error dynamic access
   return dataset[normalizedField];
 }
 
@@ -519,21 +519,20 @@ function fetchSeries(
         // Metadata response
         transformedResponse = { dataset: body.dataset };
       } else if (body.data) {
-        // Data response - transform [{date, value}] to [[date, value]]
-        const dataArray = body.data.map((obs: any) => [obs.date, obs.value]);
+        // Data response - keep as objects for SeriesResponse type
         transformedResponse = { 
-          data: dataArray, 
+          data: body.data,
           seriesId: body.seriesId,
           status: body.status,
           message: body.message
         };
         
         // Handle scalar modes (latest, value, yoy)
-        if (mode === 'latest' && dataArray.length > 0) {
-          const latest = dataArray[dataArray.length - 1];
-          transformedResponse.scalar = latest[1];
-        } else if (mode === 'value' && dataArray.length > 0) {
-          transformedResponse.scalar = dataArray[0][1];
+        if (mode === 'latest' && body.data.length > 0) {
+          const latest = body.data[body.data.length - 1];
+          transformedResponse.scalar = latest.value;
+        } else if (mode === 'value' && body.data.length > 0) {
+          transformedResponse.scalar = body.data[0].value;
         }
       } else {
         transformedResponse = body;
@@ -804,6 +803,37 @@ function deleteTemplate(templateId: string) {
 }
 
 /**
+ * Templates: Export to JSON string
+ */
+function exportTemplates(): { data: string } {
+  const templates = getTemplates();
+  return { data: JSON.stringify(templates, null, 2) };
+}
+
+/**
+ * Templates: Import from JSON string
+ */
+function importTemplates(jsonData: string): { ok: boolean; count?: number; error?: string } {
+  try {
+    const imported = JSON.parse(jsonData);
+    if (!Array.isArray(imported)) {
+      return { ok: false, error: 'Invalid template format' };
+    }
+    
+    const existing = getTemplates();
+    const combined = [...existing, ...imported];
+    PropertiesService.getUserProperties().setProperty(
+      TEMPLATES_PROP,
+      JSON.stringify(combined.slice(0, 50))
+    );
+    
+    return { ok: true, count: imported.length };
+  } catch (err) {
+    return { ok: false, error: 'Failed to parse JSON' };
+  }
+}
+
+/**
  * Multi-insert: Insert multiple series at once
  */
 function insertMultipleSeries(seriesIds: string[], functionName: string) {
@@ -848,6 +878,8 @@ g.saveTemplate = saveTemplate;
 g.getTemplates = getTemplates;
 g.loadTemplate = loadTemplate;
 g.deleteTemplate = deleteTemplate;
+g.exportTemplates = exportTemplates;
+g.importTemplates = importTemplates;
 g.insertMultipleSeries = insertMultipleSeries;
 g.include = include;
 

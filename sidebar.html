@@ -781,6 +781,52 @@
           .deleteTemplate(id);
       }
       
+      function exportTemplatesFile() {
+        google.script.run
+          .withSuccessHandler((result) => {
+            const blob = new Blob([result.data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `dsiq-templates-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showStatus('✅ Templates exported to file');
+          })
+          .withFailureHandler(showError)
+          .exportTemplates();
+      }
+      
+      function showImportDialog() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+          const file = e.target.files ? e.target.files[0] : null;
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const jsonData = event.target && event.target.result ? String(event.target.result) : '';
+            google.script.run
+              .withSuccessHandler((result) => {
+                if (result.ok) {
+                  showStatus(`✅ Imported ${result.count} templates`);
+                  loadTemplatesList();
+                } else {
+                  showStatus(`❌ ${result.error || 'Import failed'}`);
+                }
+              })
+              .withFailureHandler(showError)
+              .importTemplates(jsonData);
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      }
+      
       function toggleMultiSelect(seriesId) {
         const index = selectedForMultiInsert.indexOf(seriesId);
         if (index > -1) {
@@ -970,6 +1016,11 @@
           </div>
           
           <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+          
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button onclick="exportTemplatesFile()" style="flex: 1; background: #6366f1; color: #fff; padding: 8px;">📤 Export</button>
+            <button onclick="showImportDialog()" style="flex: 1; background: #8b5cf6; color: #fff; padding: 8px;">📥 Import</button>
+          </div>
           
           <h4 style="margin: 8px 0;">Saved Templates</h4>
           <div id="templates-list" class="muted">No templates saved yet.</div>
