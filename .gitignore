@@ -1,0 +1,6 @@
+node_modules
+Code.js
+.clasp.json
+*.log
+dist
+coverage

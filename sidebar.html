@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>DataSetIQ</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 16px;
+        color: #0f172a;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .card {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+        background: #f8fafc;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      input[type='text'] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        box-sizing: border-box;
+        margin-bottom: 8px;
+      }
+      button {
+        border: none;
+        border-radius: 6px;
+        background: #0f172a;
+        color: #fff;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+      .muted {
+        color: #475569;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .status {
+        margin: 6px 0;
+        font-size: 13px;
+      }
+      .status.error {
+        color: #b91c1c;
+      }
+      .quota {
+        font-size: 12px;
+        color: #0f172a;
+      }
+      ul {
+        padding-left: 16px;
+        margin: 8px 0;
+      }
+      li {
+        margin-bottom: 4px;
+      }
+    </style>
+    <script>
+      let currentStatus = null;
+
+      function onLoad() {
+        refreshStatus();
+      }
+
+      function refreshStatus() {
+        google.script.run
+          .withSuccessHandler(renderStatus)
+          .withFailureHandler(showError)
+          .getSidebarStatus();
+      }
+
+      function renderStatus(status) {
+        currentStatus = status;
+        const banner = document.getElementById('status-banner');
+        banner.classList.remove('error');
+        const connected = !!status.connected;
+        document.getElementById('connected-view').style.display = connected ? 'block' : 'none';
+        document.getElementById('disconnected-view').style.display = connected ? 'none' : 'block';
+        if (connected) {
+          banner.innerText = 'Connected';
+          document.getElementById('user-email').innerText = status.email || 'Unknown user';
+          document.getElementById('user-plan').innerText = status.plan || 'Unknown plan';
+          const quota = status.quota;
+          if (quota) {
+            document.getElementById('user-quota').innerText = `${quota.used}/${quota.limit} (resets ${quota.reset})`;
+          } else {
+            document.getElementById('user-quota').innerText = 'Quota unavailable';
+          }
+          document.getElementById('status-detail').innerText = status.status || '';
+        } else {
+          banner.innerText = status.error || 'Enter your API key to connect your account.';
+        }
+      }
+
+      function saveKey() {
+        const keyInput = document.getElementById('api-key');
+        const key = keyInput ? keyInput.value : '';
+        document.getElementById('status-banner').innerText = 'Saving...';
+        google.script.run
+          .withSuccessHandler(() => {
+            if (keyInput) keyInput.value = '';
+            refreshStatus();
+          })
+          .withFailureHandler(showError)
+          .saveApiKey(key);
+      }
+
+      function disconnect() {
+        google.script.run.withSuccessHandler(refreshStatus).withFailureHandler(showError).clearApiKey();
+      }
+
+      function search() {
+        const input = document.getElementById('search-box');
+        const q = input ? input.value : '';
+        if (!q) return;
+        document.getElementById('search-results').innerHTML = '<div class="muted">Searching...</div>';
+        google.script.run.withSuccessHandler(renderResults).withFailureHandler(showError).searchSeries(q);
+      }
+
+      function renderResults(results) {
+        const container = document.getElementById('search-results');
+        if (!results || !results.length) {
+          container.innerHTML = '<div class="muted">No results.</div>';
+          return;
+        }
+        container.innerHTML = '';
+        const list = document.createElement('ul');
+        results.forEach((item) => {
+          const li = document.createElement('li');
+          li.innerText = `${item.id} — ${item.title || ''}`;
+          list.appendChild(li);
+        });
+        container.appendChild(list);
+      }
+
+      function showError(err) {
+        const msg = err && err.message ? err.message : 'Unexpected error';
+        document.getElementById('status-banner').innerText = msg;
+        document.getElementById('status-banner').classList.add('error');
+      }
+    </script>
+  </head>
+  <body onload="onLoad()">
+    <h2>DataSetIQ</h2>
+    <div id="status-banner" class="status"></div>
+    <div id="connected-view" style="display: none">
+      <div class="card">
+        <div><strong>Connected as:</strong> <span id="user-email"></span></div>
+        <div><strong>Plan:</strong> <span id="user-plan"></span></div>
+        <div class="quota"><strong>Quota:</strong> <span id="user-quota"></span></div>
+        <div class="muted">Status: <span id="status-detail"></span></div>
+        <div style="margin-top: 8px">
+          <button class="secondary" onclick="disconnect()">Disconnect</button>
+        </div>
+      </div>
+      <div class="card">
+        <label for="search-box">Search Series</label>
+        <div class="row">
+          <input id="search-box" type="text" placeholder='Try "FRED-GDP"' />
+          <button onclick="search()">Search</button>
+        </div>
+        <div id="search-results" class="muted"></div>
+      </div>
+    </div>
+
+    <div id="disconnected-view" style="display: none">
+      <div class="card">
+        <label for="api-key">API Key</label>
+        <input id="api-key" type="text" placeholder="Enter your DataSetIQ API key" />
+        <button onclick="saveKey()">Connect Account</button>
+        <div class="muted">Find your key at datasetiq.com/dashboard/api-keys.</div>
+      </div>
+      <div class="card">
+        <div class="muted">
+          First time? Use Extensions > DataSetIQ > Authorize to grant network access before using custom functions.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
