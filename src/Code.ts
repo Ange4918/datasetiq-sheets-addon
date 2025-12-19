@@ -43,14 +43,19 @@ interface SearchResult {
 const SOURCES = [
   { id: 'FRED', name: 'FRED (Federal Reserve)' },
   { id: 'BLS', name: 'BLS (Bureau of Labor Statistics)' },
-  { id: 'OECD', name: 'OECD' },
-  { id: 'EUROSTAT', name: 'Eurostat' },
-  { id: 'IMF', name: 'IMF' },
-  { id: 'WORLDBANK', name: 'World Bank' },
-  { id: 'ECB', name: 'ECB (European Central Bank)' },
-  { id: 'BOE', name: 'Bank of England' },
+  { id: 'BEA', name: 'BEA (Bureau of Economic Analysis)' },
   { id: 'CENSUS', name: 'US Census Bureau' },
   { id: 'EIA', name: 'EIA (Energy Information)' },
+  { id: 'IMF', name: 'IMF (International Monetary Fund)' },
+  { id: 'OECD', name: 'OECD' },
+  { id: 'WORLDBANK', name: 'World Bank' },
+  { id: 'ECB', name: 'ECB (European Central Bank)' },
+  { id: 'EUROSTAT', name: 'Eurostat' },
+  { id: 'BOE', name: 'Bank of England' },
+  { id: 'ONS', name: 'ONS (UK Office for National Statistics)' },
+  { id: 'STATCAN', name: 'StatCan (Statistics Canada)' },
+  { id: 'RBA', name: 'RBA (Reserve Bank of Australia)' },
+  { id: 'BOJ', name: 'BOJ (Bank of Japan)' },
 ];
 
 interface SidebarStatus {
@@ -107,7 +112,17 @@ function DSIQ(seriesId: string, frequency?: string | null, startDate?: any) {
     throw new Error(errorMessage);
   }
   const data = response?.data ?? [];
-  return buildArrayResult(data);
+  const result = buildArrayResult(data);
+  
+  // Add upgrade message for free users if data is truncated at 100 observations
+  const key = getApiKey();
+  if (!key && data.length >= 100) {
+    result.push(['', '']);
+    result.push(['⚠️ Free tier limited to 100 most recent observations', '']);
+    result.push(['Upgrade for full access: datasetiq.com/pricing', '']);
+  }
+  
+  return result;
 }
 
 /**
